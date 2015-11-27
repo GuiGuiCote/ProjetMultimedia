@@ -1,3 +1,6 @@
-/**
- * Created by Guillaume on 13/11/2015.
- */
+app = require('express.io')()
+app.http().io()
+
+// build realtime-web app
+
+app.listen(7076)
