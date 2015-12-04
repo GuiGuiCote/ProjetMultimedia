@@ -4,11 +4,17 @@
         <meta charset="utf-8" />
         <title>TRON THE GAME</title>
         <link href="./css/tron.css" rel="stylesheet" />
-        <script type="text/javascript" src="./js/tron.js" defer="true"></script>
+        <script type="text/javascript" src="tron.js" defer="true"></script>
+        <script type="text/javascript" src="/socket.io/socket.io.js"></script>
+        <script type="text/javascript">
+            var socket = io.connect('/');
+            socket.on('onconnected', function( data ) {
+                console.log(data.id);
+            });
+        </script>
     </head>
     <body>
         <h1>TRON THE GAME</h1>
-        <p>Use arrowkeys to move</p>
         <canvas id="tron" width="640" height="480"></canvas>
     </body>
 </html>
