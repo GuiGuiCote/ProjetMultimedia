@@ -7,11 +7,11 @@
         <script type="text/javascript" src="tron.js" defer="true"></script>
         <script type="text/javascript" src="/socket.io/socket.io.js"></script>
         <script type="text/javascript">
-            var socket = io.connect('/');
-            socket.on('onconnected', function( data ) {
-                console.log(data.id);
-            });
-        </script>
+             var socket = io.connect();
+             socket.on('onconnected', function( data ) {
+                 console.log(data.id);
+             });
+         </script>
     </head>
     <body>
         <h1>TRON THE GAME</h1>
