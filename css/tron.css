@@ -1,15 +1,15 @@
-body {
-    background-color: limegreen;
+html, body {
+    background: #212121;
+    color: #fff;
+    font-family: Helvetica;
+    margin: 0;
+    padding: 0;
 }
-h1 {
-    font-size: 32px;
-}
-h1, p {
-    color: darkturquoise;
-    text-align: center;
-}
-canvas {
-    display: block;
-    margin: 10px auto;
-    background-color: black;
+
+#tron {
+    position: absolute;
+    border:solid 5px #333;
+    margin: auto;
+    left:0; right:0; top:0; bottom:0;
+    z-index:100;
 }

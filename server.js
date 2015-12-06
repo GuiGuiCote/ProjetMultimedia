@@ -21,13 +21,11 @@ app.get( '/*' , function( req, res) {
 
 ////////SOCKET.IO
 io.use(function(socket, next){
-    console.log('Function use called');
     var handShakeData = socket.request;
     next();
 });
 
 io.sockets.on('connection', function(player){
-    console.log('Sockets called');
     player.userid = UUID.v1();
     player.emit('onconnected', {id: player.userid});
     console.log('\t socket.io:: player ' + player.userid + ' connected');
