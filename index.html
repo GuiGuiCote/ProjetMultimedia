@@ -1,19 +1,14 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8" />
-        <title>TRON THE GAME</title>
-        <link href="./css/tron.css" rel="stylesheet" />
-        <script type="text/javascript" src="tron.js" defer></script>
-        <script type="text/javascript" src="/socket.io/socket.io.js"></script>
-        <script type="text/javascript">
-             var socket = io.connect();
-             socket.on('onconnected', function( data ) {
-                 console.log(data.id);
-             });
-         </script>
-    </head>
-    <body>
-        <canvas id="tron" width="640" height="480"></canvas>
-    </body>
+	<head>
+		<title> Real time multi-player games with HTML5</title>
+		<link href="index.css" media="screen" rel="stylesheet" type="text/css">
+		<script src="/socket.io/socket.io.js"></script>
+		<script type="text/javascript" src="lib/keyboard.js"></script>
+		<script type="text/javascript" src="shared.js"></script>
+		<script type="text/javascript" src="client.js"></script>
+	</head>
+	<body>
+		<canvas id="viewport"></canvas>
+	</body>
 </html>
