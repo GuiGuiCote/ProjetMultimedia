@@ -179,7 +179,7 @@ io.sockets.on('connection', function (client) {
             if(users.length<2) {
                 loggedUser = user;
                 users.push(loggedUser);
-                //console.log('***********'+users[users.length-1].username+'********************' + users[users.length-1].userid);
+
                 io.emit('user-login', loggedUser);
 
                 client.username=user.username;
