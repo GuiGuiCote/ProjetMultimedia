@@ -16,7 +16,7 @@ if('undefined' != typeof(global)) frame_time = 45; //22Hz soit ~45ms par frame
     }
 
     if ( !window.requestAnimationFrame ) {
-        window.requestAnimationFrame = function ( callback, element ) {
+        window.requestAnimationFrame = function ( callback ) {
             var currTime = Date.now(),
                 timeToCall = Math.max( 0, frame_time - ( currTime - lastTime ) );
             var id = window.setTimeout( function() {
@@ -33,14 +33,12 @@ if('undefined' != typeof(global)) frame_time = 45; //22Hz soit ~45ms par frame
             clearTimeout( id );
         };
     }
-
-}() );
+}());
 
 //La classe de la partie
 //On en crée une instance côté serveur pour chaque partie existante
 //On en crée une côté client pour qu'il puisse jouer dessus
 var gameShared = function(game_instance){
-
     //On stocke l'instance passé en argument
     this.instance = game_instance;
 
@@ -52,6 +50,8 @@ var gameShared = function(game_instance){
         width : 720,
         height : 480
     };
+
+    this.over = false;
 
     //Création des joueurs
     if(this.server) {
@@ -71,75 +71,58 @@ var gameShared = function(game_instance){
             other : new game_player(this)
         };
 
-        //A VIRER
+        //Position sur le serveur
         this.ghosts = {
             server_pos_self : new game_player(this),
             server_pos_other : new game_player(this),
             pos_other : new game_player(this)
         };
-
-        this.ghosts.pos_other.state = 'dest_pos';
-
-        this.ghosts.pos_other.info_color = 'rgba(255,255,255,0.1)';
-
-        this.ghosts.server_pos_self.info_color = 'rgba(255,255,255,0.2)';
-        this.ghosts.server_pos_other.info_color = 'rgba(255,255,255,0.2)';
-
-        this.ghosts.server_pos_self.state = 'server_pos';
-        this.ghosts.server_pos_other.state = 'server_pos';
-
         this.ghosts.server_pos_self.pos = { x:20, y:20 };
-        this.ghosts.pos_other.pos = { x:500, y:200 };
-        this.ghosts.server_pos_other.pos = { x:500, y:200 };
+        this.ghosts.server_pos_other.pos = { x:700, y:20 };
+        this.ghosts.pos_other.pos = { x:700, y:20 };
     }
 
     //La vitesse de déplacement du joueur
-    this.playerspeed = 2;
+    this.playerspeed = 1.5;
 
     //Set up some physics integration values
     this._pdt = 0.0001;                 //The physics update delta time
     this._pdte = new Date().getTime();  //The physics update last delta time
 
     //A local timer for precision on server and client
-    this.local_time = 0.016;            //The local timer
-    this._dt = new Date().getTime();    //The local timer delta
-    this._dte = new Date().getTime();   //The local timer last frame time
+    this.local_time = 0.016;            //Timer local
+    this._dt = new Date().getTime();    //Delta du timer local
+    this._dte = new Date().getTime();   //Le timer loal de la dernière frame
 
-    //Start a physics loop, this is separate to the rendering
-    //as this happens at a fixed frequency
+    //Boucle pour gérer la physique de base appelé toutes les 15ms
     this.create_physics_simulation();
 
-    //A VOIR
+    //Démarrage d'un timer pour mesurer le temps toutes les 1 ms
     this.create_timer();
 
-    //Client specific initialisation
+    //Initialisation spécifique client
     if(!this.server) {
         //Création de notre clavier d'évènement
         this.keyboard = new THREEx.KeyboardState();
 
-        //A REDEFINIR OU A VIRER
+        //Défini plusieurs variables pour le fonctionnement du jeu (temps, etc...)
         this.client_create_configuration();
 
         //La liste des mises à jour du serveur
         this.server_updates = [];
 
-        //Connect to the socket.io server!
+        //Connection au serveur socket.io
         this.client_connect_to_server();
-
-        //A VIRER
-        this.client_create_ping_timer();
 
         //Détermine la couleur du joueur
         this.color = localStorage.getItem('color') || '#cc8822' ;
         localStorage.setItem('color', this.color);
         this.players.self.color = this.color;
 
-
     } else {
         this.server_time = 0;
         this.laststate = {};
     }
-
 };
 
 //Côté serveur on ajoute une varible global de type global pour pouvoir l'utiliser partout
@@ -155,7 +138,6 @@ if( 'undefined' != typeof global ) {
 
 //Méthode pour les flemmard
 Number.prototype.fixed = function(n) {
-    n = n || 3;
     return parseFloat(this.toFixed(n));
 };
 
@@ -170,24 +152,8 @@ gameShared.prototype.pos = function(a) {
 //Ajoute deux vecteur l'un a l'autre et retourne le récultat
 gameShared.prototype.v_add = function(a,b) {
     return {
-        x: (a.x+b.x).fixed(),
-        y: (a.y+b.y).fixed()
-    };
-};
-
-//A VIRER
-gameShared.prototype.v_sub = function(a,b) {
-    return {
-        x: (a.x-b.x).fixed(),
-        y: (a.y-b.y).fixed()
-    };
-};
-
-//A VIRER
-gameShared.prototype.v_mul_scalar = function(a,b) {
-    return {
-        x: (a.x*b).fixed(),
-        y: (a.y*b).fixed()
+        x: (a.x + b.x).fixed(3),
+        y: (a.y + b.y).fixed(3)
     };
 };
 
@@ -196,15 +162,19 @@ gameShared.prototype.stop_update = function() {
     window.cancelAnimationFrame(this.updateid);
 };
 
-//Interpolation lineaire
+//Interpolation lineaire entre 2 valeur
 gameShared.prototype.lerp = function(p, n, t) {
-    var _t = Number(t); _t = (Math.max(0, Math.min(1, _t))).fixed();
-    return (p + _t * (n - p)).fixed();
+    var _t = Number(t);
+    _t = (Math.max(0, Math.min(1, _t))).fixed(3);
+    return (p + _t * (n - p)).fixed(3);
 };
 
 //Interpolation linéaire entre deux vecteurs
-gameShared.prototype.v_lerp = function(v,tv,t) {
-    return { x: this.lerp(v.x, tv.x, t), y:this.lerp(v.y, tv.y, t) };
+gameShared.prototype.v_lerp = function(v, tv, t) {
+    return {
+        x: this.lerp(v.x, tv.x, t),
+        y: this.lerp(v.y, tv.y, t)
+    };
 };
 
 //La classe du joueur
@@ -226,7 +196,7 @@ var game_player = function( game_instance, player_instance ) {
         hx: 4,
         hy: 4
     };
-    this.state = 'not-connected';
+    this.state = 'Déconnecté';
     this.color = 'rgba(255,255,255,0.1)';
     this.info_color = 'rgba(255,255,255,0.1)';
     this.id = '';
@@ -245,11 +215,11 @@ var game_player = function( game_instance, player_instance ) {
         }
     };
 
-    //État utiliser pour al prédiction
-    this.state_time = new Date().getTime();
-
     //Historique local des inputs des joueurs
     this.inputs = [];
+
+    //Historique local des positions des joueurs
+    this.history = [];
 
     //Les limites du plateau de jeu
     //La limite min sur l'axe x est la moitié de la taille de la moto
@@ -273,28 +243,34 @@ var game_player = function( game_instance, player_instance ) {
         };
     } else {
         this.pos = {
-            x:500,
-            y:200
+            x:700,
+            y:20
         };
     }
+};
 
+game_player.prototype.generateCoords = function(x, y){
+    return x + "," + y;
 };
 
 //Prototype de la méthode de dessin
 game_player.prototype.draw = function(){
-
-    //La couleur du joueur
-    game.ctx.fillStyle = this.color;
-
-    //Dessine la moto
-    game.ctx.fillRect(this.pos.x - this.size.hx, this.pos.y - this.size.hy, this.size.x, this.size.y);
-
     //Change la couleur en fonction du statut
     game.ctx.fillStyle = this.info_color;
+    game.ctx.beginPath();
+    game.ctx.moveTo(this.pos.x - this.size.hx , this.pos.y - this.size.hy);
+    game.ctx.lineTo(this.pos.x + this.size.hx, this.pos.y - this.size.hy);
+    game.ctx.lineTo(this.pos.x + this.size.hx, this.pos.y + this.size.hy);
+    game.ctx.lineTo(this.pos.x - this.size.hx, this.pos.y + this.size.hy);
+    game.ctx.closePath();
+    game.ctx.fill();
+
+    //Dessine la moto
+    //game.ctx.fillRect(this.pos .x - this.size.hx, this.pos.y - this.size.hy, this.size.x, this.size.y);
 
     //Affichage d'un texte ici le statut
     /////!!!!!!!!!!!!! A CHANGER POUR LE NOM DU JOUEUR !!!!!!!!!!!!!!!/////
-    game.ctx.fillText(this.state, this.pos.x+10, this.pos.y + 4);
+    //game.ctx.fillText(this.state, this.pos.x+10, this.pos.y + 4);
 
 };
 
@@ -311,7 +287,7 @@ gameShared.prototype.update = function(t) {
     //Formule delta =
     //Par défaut 0.016 soit un delta qui correspond à 60FPS / 60Hz
     this.dt =
-        this.lastframetime ? ( (t - this.lastframetime)/1000.0).fixed() : 0.016;
+        this.lastframetime ? ( (t - this.lastframetime)/1000.0).fixed(3) : 0.016;
 
     //On stocke le temps de la dernière frame pour recalculer le prochain delta
     this.lastframetime = t;
@@ -328,33 +304,51 @@ gameShared.prototype.update = function(t) {
     this.updateid = window.requestAnimationFrame(this.update.bind(this));
 };
 
-//Prototype de la méthode de vérification des collisions
+//Prototype de la méthode de vérification des collisions contre le monde
 gameShared.prototype.check_collision = function( player ) {
 
     //Bordure ouest
-    if(player.pos.x <= player.pos_limits.x_min)
+    if(player.pos.x <= player.pos_limits.x_min){
+        this.over = true;
         player.pos.x = player.pos_limits.x_min;
+    }
 
     //Bordure est
-    if(player.pos.x >= player.pos_limits.x_max )
+    if(player.pos.x >= player.pos_limits.x_max ){
+        this.over = true;
         player.pos.x = player.pos_limits.x_max;
+    }
 
     //Bordure nord
-    if(player.pos.y <= player.pos_limits.y_min)
+    if(player.pos.y <= player.pos_limits.y_min){
+        this.over = true;
         player.pos.y = player.pos_limits.y_min;
+    }
 
-    ///Bordure sud
-    if(player.pos.y >= player.pos_limits.y_max )
+    //Bordure sud
+    if(player.pos.y >= player.pos_limits.y_max ){
+        this.over = true;
         player.pos.y = player.pos_limits.y_max;
+    }
 
     player.pos.x = player.pos.x.fixed(4);
     player.pos.y = player.pos.y.fixed(4);
 
 };
 
+//Prototype de la méthode de collision entre les joueurs
+gameShared.prototype.isCollision = function(player1, player2){
+    var coords = player1.generateCoords(player1.pos.x, player1.pos.y);
+
+    console.log(coords + "    |    " + player1.history + "    |     " + player2.history);
+   /* if( player1.history.indexOf(coords) ||
+        player2.history.indexOf(coords) ) {
+    }*/
+
+};
+
 //Prototype de la méthode pour gérer les évènement du joueur
 gameShared.prototype.process_input = function( player ) {
-
     //On traite les évènement un par un
     var x_dir = 0;
     var y_dir = 0;
@@ -363,20 +357,38 @@ gameShared.prototype.process_input = function( player ) {
     //Si on a au moins 1 input
     if(ic) {
         for(var j = 0; j < ic; ++j) {
-            //don't process ones we already have simulated locally
+
+            //Inutile de traiter ceux qu'on à déjà traiter localement
             if(player.inputs[j].seq <= player.last_input_seq) continue;
 
             var input = player.inputs[j].inputs;
             for(var i = 0; i < input.length; ++i) {
                 var key = input[i];
-                if(key == 'l')
+                if(key == 'l') {
                     x_dir -= 1;
-                if(key == 'r')
+                    var coords = player.generateCoords(player.pos.x-1, player.pos.y);
+                    if(player.history.indexOf(coords) < 0)
+                        player.history.push(coords);
+                }
+                if(key == 'r'){
                     x_dir += 1;
-                if(key == 'd')
+                    var coords = player.generateCoords(player.pos.x+1, player.pos.y);
+                    if(player.history.indexOf(coords) < 0)
+                        player.history.push(coords);
+                }
+                if(key == 'd'){
                     y_dir += 1;
-                if(key == 'u')
+                    var coords = player.generateCoords(player.pos.x, player.pos.y+1);
+                    if(player.history.indexOf(coords) < 0)
+                        player.history.push(coords);
+                }
+                if(key == 'u'){
                     y_dir -= 1;
+                    var coords = player.generateCoords(player.pos.x, player.pos.y-1);
+                    if(player.history.indexOf(coords) < 0)
+                        player.history.push(coords);
+                }
+                //console.log(this.players.self.history);
             }
         }
     }
@@ -392,7 +404,6 @@ gameShared.prototype.process_input = function( player ) {
 
     //On renvoi le vecteur de résultat
     return resulting_vector;
-
 };
 
 //Prototype de la méthode calculant le nouveau vecteur de position
@@ -400,15 +411,14 @@ gameShared.prototype.physics_movement_vector_from_direction = function(x,y) {
 
     //On retourne le nouveau vecteur de position en fonction de la vitesse
     return {
-        x : (x * (this.playerspeed)).fixed(),
-        y : (y * (this.playerspeed)).fixed()
+        x : (x * (this.playerspeed)).fixed(3),
+        y : (y * (this.playerspeed)).fixed(3)
     };
 
 };
 
 //Prototype de la méthode de mise à jour en fonction du server ou du client
 gameShared.prototype.update_physics = function() {
-
     if(this.server)
         this.server_update_physics();
     else
@@ -474,12 +484,11 @@ gameShared.prototype.server_update = function(){
 };
 
 //Prototype de la méthode pour gérer les évènements des joueurs sur le serveur
-gameShared.prototype.handle_server_input = function(client, input, input_time, input_seq) {
+gameShared.prototype.handle_server_input = function(player, input, input_time, input_seq) {
 
     //On vérifie de quel joueur les évènements viennent
     var player_client =
-        (client.userid == this.players.self.instance.userid) ?
-            this.players.self : this.players.other;
+        (player.userid == this.players.self.instance.userid) ? this.players.self : this.players.other;
 
     //On stocke les inputs clients dans l'instance du joueur pour être traiter plus tard dans la boucle de mise à jour
     player_client.inputs.push({
@@ -499,10 +508,6 @@ gameShared.prototype.handle_server_input = function(client, input, input_time, i
 
 //Prototype de la fonction de gestion des évènement côté client
 gameShared.prototype.client_handle_input = function(){
-
-    //This takes input from the client and keeps a record,
-    //It also sends the input information to the server immediately
-    //as it is pressed. It also tags each input with a sequence number.
 
     var x_dir = 0;
     var y_dir = 0;
@@ -540,7 +545,7 @@ gameShared.prototype.client_handle_input = function(){
         //On stocke dans notre liste d'évènement les évènement avec le temps local et le flag de séquence
         this.players.self.inputs.push({
             inputs : input,
-            time : this.local_time.fixed(),
+            time : this.local_time.fixed(3),
             seq : this.input_seq
         });
 
@@ -557,6 +562,7 @@ gameShared.prototype.client_handle_input = function(){
         return this.physics_movement_vector_from_direction( x_dir, y_dir );
 
     //Sinon on ne bouge pas
+    ////!!!! GERER ICI LE MOUVEMENT CONTINUE !!!!////
     } else {
         return {
             x:0,
@@ -685,12 +691,10 @@ gameShared.prototype.client_process_net_updates = function() {
         this.ghosts.pos_other.pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
 
         //Dépend si on utilise le lissage de déplacement
-        if(this.client_smoothing)
-            this.players.other.pos = this.v_lerp( this.players.other.pos, this.ghosts.pos_other.pos, this._pdt * this.client_smooth);
-        else
-            this.players.other.pos = this.pos(this.ghosts.pos_other.pos);
+        this.players.other.pos = this.v_lerp( this.players.other.pos, this.ghosts.pos_other.pos, this._pdt * this.client_smooth);
 
-        //Si jamais on utilise pas la prédiction client
+
+        //Si jamais on utilise pas la prédiction client ni l'approche naive
         if(!this.client_predict && !this.naive_approach) {
 
             //Position exacte du serveur
@@ -705,10 +709,7 @@ gameShared.prototype.client_process_net_updates = function() {
             var local_target = this.v_lerp(my_past_pos, my_target_pos, time_point);
 
             //Dépend si on utilise le lissage de déplacement
-            if(this.client_smoothing)
-                this.players.self.pos = this.v_lerp( this.players.self.pos, local_target, this._pdt*this.client_smooth);
-            else
-                this.players.self.pos = this.pos( local_target );
+            this.players.self.pos = this.v_lerp( this.players.self.pos, local_target, this._pdt*this.client_smooth);
         }
     }
 };
@@ -721,7 +722,6 @@ gameShared.prototype.client_onserverupdate_received = function(data){
     //the positions we get from the server are mapped onto the correct local sprites
     var player_host = this.players.self.host ?  this.players.self : this.players.other;
     var player_client = this.players.self.host ?  this.players.other : this.players.self;
-    var this_player = this.players.self;
 
     //Store the server time (this is offset by the latency in the network, by the time we get it)
     this.server_time = data.t;
@@ -736,13 +736,11 @@ gameShared.prototype.client_onserverupdate_received = function(data){
 
     if(this.naive_approach) {
 
-        if(data.hp) {
+        if(data.hp)
             player_host.pos = this.pos(data.hp);
-        }
 
-        if(data.cp) {
+        if(data.cp)
             player_client.pos = this.pos(data.cp);
-        }
 
     } else {
 
@@ -776,7 +774,6 @@ gameShared.prototype.client_onserverupdate_received = function(data){
 gameShared.prototype.client_update_local_position = function(){
 
     if(this.client_predict) {
-
         //L'État actuel du joueur
         var current_state = this.players.self.cur_state.pos;
 
@@ -785,7 +782,7 @@ gameShared.prototype.client_update_local_position = function(){
 
         //On vérifie la collision
         this.check_collision( this.players.self );
-
+        this.isCollision(this.players.self, this.players.other)
     }
 };
 
@@ -805,19 +802,11 @@ gameShared.prototype.client_update_physics = function() {
 //Prototype de la méthode de mise à jour client de dessin
 gameShared.prototype.client_update = function() {
 
-    //On efface le dessin
-    this.ctx.clearRect(0,0,720,480);
-
-    //A VIRER
-    this.client_draw_info();
-
     //On gère les évènement client
     this.client_handle_input();
 
     //On met à jour les positions des autres joueurs
-    if( !this.naive_approach ) {
-        this.client_process_net_updates();
-    }
+    this.client_process_net_updates();
 
     //On redessine les autres joueurs
     this.players.other.draw();
@@ -827,30 +816,16 @@ gameShared.prototype.client_update = function() {
 
     //On redessine le joueur
     this.players.self.draw();
-
-    //A VIRER
-    if(this.show_dest_pos && !this.naive_approach)
-        this.ghosts.pos_other.draw();
-
-    //A VIRER
-    if(this.show_server_pos && !this.naive_approach) {
-        this.ghosts.server_pos_self.draw();
-        this.ghosts.server_pos_other.draw();
-    }
-
-    //Work out the fps average
-    this.client_refresh_fps();
-
 };
 
-//A VOIR
+//Timer pour calcul du temps toutes les 1ms
 gameShared.prototype.create_timer = function(){
     setInterval(function(){
         this._dt = new Date().getTime() - this._dte;
         this._dte = new Date().getTime();
         this.local_time += this._dt/1000.0;
-    }.bind(this), 4);
-}
+    }.bind(this), 1);
+};
 
 //Boucle toutes les 15ms
 gameShared.prototype.create_physics_simulation = function() {
@@ -863,31 +838,15 @@ gameShared.prototype.create_physics_simulation = function() {
 
 };
 
-//Creation du timer pour le ping de 1s
-gameShared.prototype.client_create_ping_timer = function() {
-    setInterval(function(){
-        this.last_ping_time = new Date().getTime() - this.fake_lag;
-        this.socket.send('p.' + (this.last_ping_time) );
-    }.bind(this), 1000);
-
-};
-
 //A REDEFINIR OU VIRER COMPLETEMENT
 gameShared.prototype.client_create_configuration = function() {
 
-    this.show_help = false;
-    this.naive_approach = false;
-    this.show_server_pos = false;
-    this.show_dest_pos = false;
-    this.client_predict = true;
+    this.naive_approach = true;
+    this.client_predict = false;
     this.input_seq = 0;
-    this.client_smoothing = true;
     this.client_smooth = 25;
 
     this.net_latency = 0.001;
-    this.net_ping = 0.001;
-    this.last_ping_time = 0.001;
-    this.fake_lag = 0;
 
     this.net_offset = 100;
     this.buffer_size = 2;
@@ -895,88 +854,37 @@ gameShared.prototype.client_create_configuration = function() {
 
     this.client_time = 0.01;
     this.server_time = 0.01;
-
-    this.dt = 0.016;
-    this.fps = 0;
-    this.fps_avg_count = 0;
-    this.fps_avg = 0;
-    this.fps_avg_acc = 0;
-};
-
-//A VIRER
-gameShared.prototype.client_create_debug_gui = function() {
-
-    this.gui = new dat.GUI();
-
-    var _playersettings = this.gui.addFolder('Your settings');
-
-    this.colorcontrol = _playersettings.addColor(this, 'color');
-
-    this.colorcontrol.onChange(function(value) {
-        this.players.self.color = value;
-        localStorage.setItem('color', value);
-        this.socket.send('c.' + value);
-    }.bind(this));
-
-    _playersettings.open();
-
-    var _othersettings = this.gui.addFolder('Methods');
-
-    _othersettings.add(this, 'naive_approach').listen();
-    _othersettings.add(this, 'client_smoothing').listen();
-    _othersettings.add(this, 'client_smooth').listen();
-    _othersettings.add(this, 'client_predict').listen();
-
-    var _debugsettings = this.gui.addFolder('Debug view');
-
-    _debugsettings.add(this, 'show_help').listen();
-    _debugsettings.add(this, 'fps_avg').listen();
-    _debugsettings.add(this, 'show_server_pos').listen();
-    _debugsettings.add(this, 'show_dest_pos').listen();
-    _debugsettings.add(this, 'local_time').listen();
-
-    _debugsettings.open();
-
-    var _consettings = this.gui.addFolder('Connection');
-    _consettings.add(this, 'net_latency').step(0.001).listen();
-    _consettings.add(this, 'net_ping').step(0.001).listen();
-
-    var lag_control = _consettings.add(this, 'fake_lag').step(0.001).listen();
-    lag_control.onChange(function(value){
-        this.socket.send('l.' + value);
-    }.bind(this));
-
-    _consettings.open();
-
-    var _netsettings = this.gui.addFolder('Networking');
-
-    _netsettings.add(this, 'net_offset').min(0.01).step(0.001).listen();
-    _netsettings.add(this, 'server_time').step(0.001).listen();
-    _netsettings.add(this, 'client_time').step(0.001).listen();
-
-    _netsettings.open();
-
 };
 
 //Prototype de la méthode lorsque qu'on reset les positions
 gameShared.prototype.client_reset_positions = function() {
 
+    this.ctx.clearRect(0, 0, 720, 480);
     //Définition de l'hôte et des autre client
     ////!!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!!!!/////
     var player_host = this.players.self.host ?  this.players.self : this.players.other;
     var player_client = this.players.self.host ?  this.players.other : this.players.self;
+
+    //On vide l'historique des positions des joueurs
+    player_host.history = [];
+    player_client.history = [];
 
     //Position de l'hôte
     player_host.pos = {
         x:20,
         y:20
     };
+
     //Position des autres joueurs
     ////!!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!!!!/////
     player_client.pos = {
-        x:500,
-        y:200
+        x:700,
+        y:20
     };
+
+    //On rajoute dans leur historique respectif la position initiale des joueurs
+    player_host.history.push(player_host.generateCoords(player_host.pos.x, player_host.pos.y));
+    player_client.history.push(player_client.generateCoords(player_client.pos.x, player_client.pos.y));
 
     //Mise à jour de la position locale du joueur
     this.players.self.old_state.pos = this.pos(this.players.self.pos);
@@ -1016,16 +924,12 @@ gameShared.prototype.client_onreadygame = function(data) {
     player_host.state = 'King';
     player_client.state = 'Challenger';
 
-    //Pour indiquer au joueur qui il est
-    this.players.self.state = '*' + this.players.self.state;
-
     //Synchronisation couleurs
     this.socket.send('c.' + this.players.self.color);
-
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous demandant de rejoindre une partie
-gameShared.prototype.client_onjoingame = function(data) {
+gameShared.prototype.client_onjoingame = function() {
 
     //Nous ne sommes pas hôte
     this.players.self.host = false;
@@ -1036,7 +940,6 @@ gameShared.prototype.client_onjoingame = function(data) {
 
     //On reset les postion pour être sur d'être bien placer
     this.client_reset_positions();
-
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous demandant d'être hôte de partie
@@ -1075,12 +978,6 @@ gameShared.prototype.client_on_otherclientcolorchange = function(data) {
     this.players.other.color = data;
 };
 
-//Calcul du ping et la latence réseau
-gameShared.prototype.client_onping = function(data) {
-    this.net_ping = new Date().getTime() - parseFloat( data );
-    this.net_latency = this.net_ping/2;
-};
-
 //Prototype de la méthode lors de la reception d'un message serveur
 gameShared.prototype.client_onnetmessage = function(data) {
 
@@ -1107,9 +1004,7 @@ gameShared.prototype.client_onnetmessage = function(data) {
                 case 'e' :
                     this.client_ondisconnect(commanddata); break;
 
-                case 'p' :
-                    this.client_onping(commanddata); break;
-                case 'c' : //other player changed colors
+                case 'c' :
                     this.client_on_otherclientcolorchange(commanddata); break;
             }
             break;
@@ -1156,50 +1051,5 @@ gameShared.prototype.client_connect_to_server = function() {
 
     //Reception d'un message serveur
     this.socket.on('message', this.client_onnetmessage.bind(this));
-
 };
 
-//Prototype de la méthode de calcul des FPS moyen du client
-gameShared.prototype.client_refresh_fps = function() {
-    this.fps = 1/this.dt;
-    this.fps_avg_acc += this.fps;
-    this.fps_avg_count++;
-
-    //On lisse le fps sur 10 images
-    if(this.fps_avg_count >= 10) {
-
-        this.fps_avg = this.fps_avg_acc/10;
-        this.fps_avg_count = 1;
-        this.fps_avg_acc = this.fps;
-
-    } //reached 10 frames
-
-};
-
-//A VIRER
-gameShared.prototype.client_draw_info = function() {
-
-    this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
-
-    if(this.show_help) {
-
-        this.ctx.fillText('net_offset : local offset of others players and their server updates. Players are net_offset "in the past" so we can smoothly draw them interpolated.', 10 , 30);
-        this.ctx.fillText('server_time : last known game time on server', 10 , 70);
-        this.ctx.fillText('client_time : delayed game time on client for other players only (includes the net_offset)', 10 , 90);
-        this.ctx.fillText('net_latency : Time from you to the server. ', 10 , 130);
-        this.ctx.fillText('net_ping : Time from you to the server and back. ', 10 , 150);
-        this.ctx.fillText('fake_lag : Add fake ping/lag for testing, applies only to your inputs (watch server_pos block!). ', 10 , 170);
-        this.ctx.fillText('client_smoothing/client_smooth : When updating players information from the server, it can smooth them out.', 10 , 210);
-        this.ctx.fillText(' This only applies to other clients when prediction is enabled, and applies to local player with no prediction.', 170 , 230);
-
-    }
-
-    if(this.players.self.host) {
-
-        this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        this.ctx.fillText('Vous êtes l\'hôte', 10 , 465);
-
-    }
-
-    this.ctx.fillStyle = 'rgba(255,255,255,1)';
-};

@@ -19,8 +19,6 @@ gameServer.local_time = 0;
 
 //le delta du timer local
 gameServer._dt = new Date().getTime();
-
-//la dernière frame du timer local
 gameServer._dte = new Date().getTime();
 
 //File d'attente des messages dont on delai l'utilisation
@@ -30,59 +28,34 @@ setInterval(function(){
     gameServer._dt = new Date().getTime() - gameServer._dte;
     gameServer._dte = new Date().getTime();
     gameServer.local_time += gameServer._dt/1000.0;
-}, 4);
+}, 1);
 
-gameServer.onMessage = function(client,message) {
-
-    if(this.fake_latency && message.split('.')[0].substr(0,1) == 'i') {
-
-        //store all input message
-        gameServer.messages.push({client:client, message:message});
-
-        setTimeout(function(){
-            if(gameServer.messages.length) {
-                gameServer._onMessage( gameServer.messages[0].client, gameServer.messages[0].message );
-                gameServer.messages.splice(0,1);
-            }
-        }.bind(this), this.fake_latency);
-
-    } else {
-        gameServer._onMessage(client, message);
-    }
-};
-
-gameServer._onMessage = function(client,message) {
+gameServer.onMessage = function(client, message) {
 
     var message_parts = message.split('.');
     var message_type = message_parts[0];
 
-    var other_client =
-        (client.game.player_host.userid == client.userid) ?
-            client.game.player_client : client.game.player_host;
+    var other_client = (client.game.player_host.userid == client.userid) ? client.game.player_client : client.game.player_host;
 
-    if(message_type == 'i') {
+    if(message_type == 'i')
         this.onInput(client, message_parts);
-    } else if(message_type == 'p') {
+
+    else if(message_type == 'p')
         client.send('s.p.' + message_parts[1]);
-    } else if(message_type == 'c') {    //Client changed their color!
+
+    else if(message_type == 'c') {
         if(other_client)
             other_client.send('s.c.' + message_parts[1]);
-    } else if(message_type == 'l') {    //A client is asking for lag simulation
-        this.fake_latency = parseFloat(message_parts[1]);
     }
-
 };
 
-gameServer.onInput = function(client, parts) {
+gameServer.onInput = function(player, inputs) {
+    var input_commands = inputs[1].split('-');
+    var input_time = inputs[2].replace('-','.');
+    var input_seq = inputs[3];
 
-    var input_commands = parts[1].split('-');
-    var input_time = parts[2].replace('-','.');
-    var input_seq = parts[3];
-
-    if(client && client.game && client.game.gamecore) {
-        client.game.gamecore.handle_server_input(client, input_commands, input_time, input_seq);
-    }
-
+    if(player && player.game && player.game.gamecore)
+        player.game.gamecore.handle_server_input(player, input_commands, input_time, input_seq);
 };
 
 //////////////////////////////////////////
@@ -125,7 +98,6 @@ gameServer.createGame = function(player) {
 
     //On affecter cette instance de partie à la partie du joueur
     player.game = instanceDePartie;
-
     //Le joueur est l'hôte
     player.hosting = true;
 
@@ -136,7 +108,8 @@ gameServer.createGame = function(player) {
 };
 
 //Suppression d'une partie
-//A appeller lorsque tous l'un des joueurs
+//A appeller lorsque tous l'un des joueurs quitte la partie
+//Ou lors d'une collision
 gameServer.endGame = function(idPartie, idClient) {
 
     var instanceDePartie = this.games[idPartie];
@@ -187,7 +160,7 @@ gameServer.endGame = function(idPartie, idClient) {
 
     //Si la partie n'existe pas
     } else
-        this.log('that game was not found!');
+        this.log('game not found!');
 };
 
 //Démarrage d'une partie

@@ -39,13 +39,13 @@ var typingUsers = [];
     console.log('\t :: Express :: Listening on port ' + gameport );
 
     //Par défaut on renvoi tout chemin / vers /index.html
-    app.get( '/', function( req, res ){
+    app.get( '/', function(req, res){
         console.log('trying to load %s', __dirname + '/index.html');
         res.sendFile( '/index.html' , { root:__dirname });
     });
 
     //Ici on gère les requète sur tout autre fichier
-    app.get( '/*' , function( req, res, next ) {
+    app.get( '/*' , function(req, res) {
         var file = req.params[0];
         res.sendFile( __dirname + '/' + file );
     });

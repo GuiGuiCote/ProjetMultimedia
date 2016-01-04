@@ -72,7 +72,7 @@ window.onload = function(){
 	game = new gameShared();
 
 		//On recupère le canvas
-		game.viewport = document.getElementById('viewport');
+		game.viewport = document.getElementById('gamefield');
 			
 		//On ajuste la taille
 		game.viewport.width = game.world.width;
