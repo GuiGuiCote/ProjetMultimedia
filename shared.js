@@ -6,7 +6,6 @@ var frame_time = 60/1000; //60Hz soit ~16ms par frame
 if('undefined' != typeof(global)) frame_time = 45; //22Hz soit ~45ms par frame
 
 ( function () {
-
     var lastTime = 0;
     var vendors = [ 'ms', 'moz', 'webkit', 'o' ];
 
@@ -51,13 +50,11 @@ var gameShared = function(game_instance){
         height : 480
     };
 
-    this.over = false;
-
     //Création des joueurs
     if(this.server) {
         this.players = {
-            self : new game_player(this,this.instance.player_host),
-            other : new game_player(this,this.instance.player_client)
+            self : new gamePlayer(this,this.instance.playerHost),
+            other : new gamePlayer(this,this.instance.playerClient)
         };
 
         this.players.self.pos = {
@@ -67,15 +64,15 @@ var gameShared = function(game_instance){
 
     } else {
         this.players = {
-            self : new game_player(this),
-            other : new game_player(this)
+            self : new gamePlayer(this),
+            other : new gamePlayer(this)
         };
 
         //Position sur le serveur
         this.ghosts = {
-            server_pos_self : new game_player(this),
-            server_pos_other : new game_player(this),
-            pos_other : new game_player(this)
+            server_pos_self : new gamePlayer(this),
+            server_pos_other : new gamePlayer(this),
+            pos_other : new gamePlayer(this)
         };
         this.ghosts.server_pos_self.pos = { x:20, y:20 };
         this.ghosts.server_pos_other.pos = { x:700, y:20 };
@@ -85,20 +82,20 @@ var gameShared = function(game_instance){
     //La vitesse de déplacement du joueur
     this.playerspeed = 1.5;
 
-    //Set up some physics integration values
-    this._pdt = 0.0001;                 //The physics update delta time
-    this._pdte = new Date().getTime();  //The physics update last delta time
+    //Valeur pour la physique
+    this._pdt = 0.0001;                 //Le delta
+    this._pdte = new Date().getTime();  //Le delta e la dernière update de la physique
 
-    //A local timer for precision on server and client
+    //Valeur pour la précision client et serveur
     this.local_time = 0.016;            //Timer local
     this._dt = new Date().getTime();    //Delta du timer local
     this._dte = new Date().getTime();   //Le timer loal de la dernière frame
 
     //Boucle pour gérer la physique de base appelé toutes les 15ms
-    this.create_physics_simulation();
+    this.clientStartPhysics();
 
     //Démarrage d'un timer pour mesurer le temps toutes les 1 ms
-    this.create_timer();
+    this.clientStartTimer();
 
     //Initialisation spécifique client
     if(!this.server) {
@@ -106,13 +103,13 @@ var gameShared = function(game_instance){
         this.keyboard = new THREEx.KeyboardState();
 
         //Défini plusieurs variables pour le fonctionnement du jeu (temps, etc...)
-        this.client_create_configuration();
+        this.clientConfig();
 
         //La liste des mises à jour du serveur
-        this.server_updates = [];
+        this.serverUpdates = [];
 
         //Connection au serveur socket.io
-        this.client_connect_to_server();
+        this.clientConnection();
 
         //Détermine la couleur du joueur
         this.color = localStorage.getItem('color') || '#cc8822' ;
@@ -120,7 +117,7 @@ var gameShared = function(game_instance){
         this.players.self.color = this.color;
 
     } else {
-        this.server_time = 0;
+        this.serverTime = 0;
         this.laststate = {};
     }
 };
@@ -150,7 +147,7 @@ gameShared.prototype.pos = function(a) {
 };
 
 //Ajoute deux vecteur l'un a l'autre et retourne le récultat
-gameShared.prototype.v_add = function(a,b) {
+gameShared.prototype.addVector = function(a,b) {
     return {
         x: (a.x + b.x).fixed(3),
         y: (a.y + b.y).fixed(3)
@@ -158,7 +155,7 @@ gameShared.prototype.v_add = function(a,b) {
 };
 
 //Arrêt de la boucle d'update
-gameShared.prototype.stop_update = function() {
+gameShared.prototype.stopUpdate = function() {
     window.cancelAnimationFrame(this.updateid);
 };
 
@@ -170,7 +167,7 @@ gameShared.prototype.lerp = function(p, n, t) {
 };
 
 //Interpolation linéaire entre deux vecteurs
-gameShared.prototype.v_lerp = function(v, tv, t) {
+gameShared.prototype.lerpVector = function(v, tv, t) {
     return {
         x: this.lerp(v.x, tv.x, t),
         y: this.lerp(v.y, tv.y, t)
@@ -179,7 +176,7 @@ gameShared.prototype.v_lerp = function(v, tv, t) {
 
 //La classe du joueur
 //Permet de conserver l'état du joueur et de déssiner
-var game_player = function( game_instance, player_instance ) {
+var gamePlayer = function( game_instance, player_instance ) {
 
     //On socke les instance du joueur et de la partie en cours
     this.instance = player_instance;
@@ -198,7 +195,7 @@ var game_player = function( game_instance, player_instance ) {
     };
     this.state = 'Déconnecté';
     this.color = 'rgba(255,255,255,0.1)';
-    this.info_color = 'rgba(255,255,255,0.1)';
+    this.infoColor = 'rgba(255,255,255,0.1)';
     this.id = '';
 
     //Utiliser pour le mouvement
@@ -249,29 +246,17 @@ var game_player = function( game_instance, player_instance ) {
     }
 };
 
-game_player.prototype.generateCoords = function(x, y){
+gamePlayer.prototype.generateCoords = function(x, y){
     return x + "," + y;
 };
 
 //Prototype de la méthode de dessin
-game_player.prototype.draw = function(){
+gamePlayer.prototype.draw = function(){
     //Change la couleur en fonction du statut
-    game.ctx.fillStyle = this.info_color;
-    game.ctx.beginPath();
-    game.ctx.moveTo(this.pos.x - this.size.hx , this.pos.y - this.size.hy);
-    game.ctx.lineTo(this.pos.x + this.size.hx, this.pos.y - this.size.hy);
-    game.ctx.lineTo(this.pos.x + this.size.hx, this.pos.y + this.size.hy);
-    game.ctx.lineTo(this.pos.x - this.size.hx, this.pos.y + this.size.hy);
-    game.ctx.closePath();
-    game.ctx.fill();
+    game.ctx.fillStyle = this.infoColor;
 
     //Dessine la moto
-    //game.ctx.fillRect(this.pos .x - this.size.hx, this.pos.y - this.size.hy, this.size.x, this.size.y);
-
-    //Affichage d'un texte ici le statut
-    /////!!!!!!!!!!!!! A CHANGER POUR LE NOM DU JOUEUR !!!!!!!!!!!!!!!/////
-    //game.ctx.fillText(this.state, this.pos.x+10, this.pos.y + 4);
-
+    game.ctx.fillRect(this.pos .x - this.size.hx, this.pos.y - this.size.hy, this.size.x, this.size.y);
 };
 
 //////////////////////////////////////////
@@ -281,23 +266,14 @@ game_player.prototype.draw = function(){
 //////////////////////////////////////////
 
 //Prototype de la boucle de mise à jour
-gameShared.prototype.update = function(t) {
-
-    //Calcul du delta pour que le déplacement soit indépendant du framerate
-    //Formule delta =
-    //Par défaut 0.016 soit un delta qui correspond à 60FPS / 60Hz
-    this.dt =
-        this.lastframetime ? ( (t - this.lastframetime)/1000.0).fixed(3) : 0.016;
-
-    //On stocke le temps de la dernière frame pour recalculer le prochain delta
-    this.lastframetime = t;
+gameShared.prototype.update = function() {
 
     //En fonction de si on se trouve sur le client ou sur le serveur
     //on fait l'update adéquate
     if(!this.server)
-        this.client_update();
+        this.clientUpdate();
     else
-        this.server_update();
+        this.serverUpdate();
 
     //On prépare la prochaine mise à jour avec un callback sur cette méthode de mise à jour qu'on lie
     //à l'objet dans l'état
@@ -305,29 +281,25 @@ gameShared.prototype.update = function(t) {
 };
 
 //Prototype de la méthode de vérification des collisions contre le monde
-gameShared.prototype.check_collision = function( player ) {
+gameShared.prototype.checkCollision = function( player ) {
 
     //Bordure ouest
     if(player.pos.x <= player.pos_limits.x_min){
-        this.over = true;
         player.pos.x = player.pos_limits.x_min;
     }
 
     //Bordure est
     if(player.pos.x >= player.pos_limits.x_max ){
-        this.over = true;
         player.pos.x = player.pos_limits.x_max;
     }
 
     //Bordure nord
     if(player.pos.y <= player.pos_limits.y_min){
-        this.over = true;
         player.pos.y = player.pos_limits.y_min;
     }
 
     //Bordure sud
     if(player.pos.y >= player.pos_limits.y_max ){
-        this.over = true;
         player.pos.y = player.pos_limits.y_max;
     }
 
@@ -336,19 +308,8 @@ gameShared.prototype.check_collision = function( player ) {
 
 };
 
-//Prototype de la méthode de collision entre les joueurs
-gameShared.prototype.isCollision = function(player1, player2){
-    var coords = player1.generateCoords(player1.pos.x, player1.pos.y);
-
-    console.log(coords + "    |    " + player1.history + "    |     " + player2.history);
-   /* if( player1.history.indexOf(coords) ||
-        player2.history.indexOf(coords) ) {
-    }*/
-
-};
-
 //Prototype de la méthode pour gérer les évènement du joueur
-gameShared.prototype.process_input = function( player ) {
+gameShared.prototype.communProcessInputs = function( player ) {
     //On traite les évènement un par un
     var x_dir = 0;
     var y_dir = 0;
@@ -394,7 +355,7 @@ gameShared.prototype.process_input = function( player ) {
     }
 
     //Calcul du vecteur résultat
-    var resulting_vector = this.physics_movement_vector_from_direction(x_dir,y_dir);
+    var resulting_vector = this.vectorWithSpeed(x_dir,y_dir);
 
     if(player.inputs.length) {
         //On stocke maintenant l'input dans les anciens
@@ -407,7 +368,7 @@ gameShared.prototype.process_input = function( player ) {
 };
 
 //Prototype de la méthode calculant le nouveau vecteur de position
-gameShared.prototype.physics_movement_vector_from_direction = function(x,y) {
+gameShared.prototype.vectorWithSpeed = function(x,y) {
 
     //On retourne le nouveau vecteur de position en fonction de la vitesse
     return {
@@ -418,11 +379,11 @@ gameShared.prototype.physics_movement_vector_from_direction = function(x,y) {
 };
 
 //Prototype de la méthode de mise à jour en fonction du server ou du client
-gameShared.prototype.update_physics = function() {
+gameShared.prototype.communUpdatePhysics = function() {
     if(this.server)
-        this.server_update_physics();
+        this.serverUpdatePhysics();
     else
-        this.client_update_physics();
+        this.clientUpdatePhysics();
 };
 
 //////////////////////////////////////////
@@ -432,25 +393,23 @@ gameShared.prototype.update_physics = function() {
 //////////////////////////////////////////
 
 //Mis à jour de l'état du jeu toutes les 15ms
-gameShared.prototype.server_update_physics = function() {
+gameShared.prototype.serverUpdatePhysics = function() {
 
     //Mis à jour de l'hôte
     this.players.self.old_state.pos = this.pos( this.players.self.pos );
-    var new_dir = this.process_input(this.players.self);
-    this.players.self.pos = this.v_add( this.players.self.old_state.pos, new_dir );
+    var newVector = this.communProcessInputs(this.players.self);
+    this.players.self.pos = this.addVector( this.players.self.old_state.pos, newVector );
 
     //Mis à jour des autres joueurs
-    ////!!!!!!!!!! A MODIFIER POUR GERER PLUSIEUR JOUEUR !!!!!!!!!!!!!////
     this.players.other.old_state.pos = this.pos( this.players.other.pos );
-    var other_new_dir = this.process_input(this.players.other);
-    this.players.other.pos = this.v_add( this.players.other.old_state.pos, other_new_dir);
+    var otherNewVector = this.communProcessInputs(this.players.other);
+    this.players.other.pos = this.addVector( this.players.other.old_state.pos, otherNewVector);
 
     //Vérification des collision pour l'hôte
-    this.check_collision( this.players.self );
+    this.checkCollision( this.players.self );
 
     //Vérification des collisions pour les autres joueurs
-    ////!!!!!!!!!! A MODIFIER POUR GERER PLUSIEUR JOUEUR !!!!!!!!!!!!!////
-    this.check_collision( this.players.other );
+    this.checkCollision( this.players.other );
 
     //On dump le contenu du buffer d'évènement
     this.players.self.inputs = [];
@@ -458,18 +417,18 @@ gameShared.prototype.server_update_physics = function() {
 };
 
 //On s'assure que le server envoie les mis à jour aux joueur
-gameShared.prototype.server_update = function(){
+gameShared.prototype.serverUpdate = function(){
 
     //Mise à joure du timer local pour correspondre au timer
-    this.server_time = this.local_time;
+    this.serverTime = this.local_time;
 
     //On construit un état pour l'envoyer aux joueurs
     this.laststate = {
         hp  : this.players.self.pos,                //la position de l'hôte
-        cp  : this.players.other.pos,               //la position des autres joueurs ////!!!!!!!!!! A MODIFIER POUR GERER PLUSIEUR JOUEUR !!!!!!!!!!!!!////
+        cp  : this.players.other.pos,               //la position des autres joueurs
         his : this.players.self.last_input_seq,     //les dernier inputs de l'hote
-        cis : this.players.other.last_input_seq,    //les derniers inputs des autres joueurs ////!!!!!!!!!! A MODIFIER POUR GERER PLUSIEUR JOUEUR !!!!!!!!!!!!!////
-        t   : this.server_time                      // le temps local serveur
+        cis : this.players.other.last_input_seq,    //les derniers inputs des autres joueurs
+        t   : this.serverTime                      //le temps local serveur
     };
 
     //Envoi de l'état à l'hôte
@@ -477,21 +436,20 @@ gameShared.prototype.server_update = function(){
         this.players.self.instance.emit('onserverupdate', this.laststate );
 
     //Envoi de l'état au autres joueurs
-    ////!!!!!!!!!! A MODIFIER POUR GERER PLUSIEUR JOUEUR !!!!!!!!!!!!!////
     if(this.players.other.instance)
         this.players.other.instance.emit('onserverupdate', this.laststate );
 
 };
 
 //Prototype de la méthode pour gérer les évènements des joueurs sur le serveur
-gameShared.prototype.handle_server_input = function(player, input, input_time, input_seq) {
+gameShared.prototype.serverProcessInputs = function(player, input, input_time, input_seq) {
 
     //On vérifie de quel joueur les évènements viennent
-    var player_client =
+    var playerClient =
         (player.userid == this.players.self.instance.userid) ? this.players.self : this.players.other;
 
     //On stocke les inputs clients dans l'instance du joueur pour être traiter plus tard dans la boucle de mise à jour
-    player_client.inputs.push({
+    playerClient.inputs.push({
         inputs: input,
         time: input_time,
         seq: input_seq
@@ -507,7 +465,7 @@ gameShared.prototype.handle_server_input = function(player, input, input_time, i
 //////////////////////////////////////////
 
 //Prototype de la fonction de gestion des évènement côté client
-gameShared.prototype.client_handle_input = function(){
+gameShared.prototype.clientProcessInputs = function(){
 
     var x_dir = 0;
     var y_dir = 0;
@@ -550,19 +508,18 @@ gameShared.prototype.client_handle_input = function(){
         });
 
         //On construit le packet
-        var server_packet = 'i.';
-        server_packet += input.join('-') + '.';
-        server_packet += this.local_time.toFixed(3).replace('.','-') + '.';
-        server_packet += this.input_seq;
+        var packet = 'i.';
+        packet += input.join('-') + '.';
+        packet += this.local_time.toFixed(3).replace('.','-') + '.';
+        packet += this.input_seq;
 
         //On envoi le packet au serveur
-        this.socket.send(  server_packet  );
+        this.socket.send(packet);
 
         //On retourne le nouveau vecteur directionnel
-        return this.physics_movement_vector_from_direction( x_dir, y_dir );
+        return this.vectorWithSpeed( x_dir, y_dir );
 
     //Sinon on ne bouge pas
-    ////!!!! GERER ICI LE MOUVEMENT CONTINUE !!!!////
     } else {
         return {
             x:0,
@@ -574,159 +531,140 @@ gameShared.prototype.client_handle_input = function(){
 
 //Prototype de la méthode de prédiction client sur le réseau
 //Corriger les erreurs de mouvement si il y en à
-gameShared.prototype.client_process_net_prediction_correction = function() {
+gameShared.prototype.clientPredictionCorrection = function() {
 
     //Si il n'y à pas d'update serveur on ne fait rien
-    if(!this.server_updates.length)
+    if(!this.serverUpdates.length)
         return;
 
     //On récupère l'update serveur la plus récente
-    var latest_server_data = this.server_updates[this.server_updates.length-1];
+    var latestServerData = this.serverUpdates[this.serverUpdates.length-1];
 
     //Si c'est l'hote on récupère sa position sinon on récupère la position des autres joueurs
-    ////!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!/////
-    var my_server_pos = this.players.self.host ? latest_server_data.hp : latest_server_data.cp;
+    var serverPos = this.players.self.host ? latestServerData.hp : latestServerData.cp;
 
     //A VIRER
-    this.ghosts.server_pos_self.pos = this.pos(my_server_pos);
+    this.ghosts.server_pos_self.pos = this.pos(serverPos);
 
     //Si c'est l'hote on récupère ses évènements sinon on récupère les évènements des autres joueurs
-    ////!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!/////
-    var my_last_input_on_server = this.players.self.host ? latest_server_data.his : latest_server_data.cis;
-    if(my_last_input_on_server) {
-        var lastinputseq_index = -1;
+    var lastInputOnServer = this.players.self.host ? latestServerData.his : latestServerData.cis;
+    if(lastInputOnServer) {
+        var lastInputSeqIndex = -1;
 
         //On cherche l'input dans la liste et on stocke l'index
         for(var i = 0; i < this.players.self.inputs.length; ++i) {
-            if(this.players.self.inputs[i].seq == my_last_input_on_server) {
-                lastinputseq_index = i;
+            if(this.players.self.inputs[i].seq == lastInputOnServer) {
+                lastInputSeqIndex = i;
                 break;
             }
         }
 
         //Si on a trouver l'input, on vire les mise à jour qu'on à déjà traiter
-        if(lastinputseq_index != -1) {
+        if(lastInputSeqIndex != -1) {
 
             //On met l'index de prediction à linex confirmer par le serveur
-            var number_to_clear = Math.abs(lastinputseq_index - (-1));
-            this.players.self.inputs.splice(0, number_to_clear);
+            var indexToClear = Math.abs(lastInputSeqIndex - (-1));
+            this.players.self.inputs.splice(0, indexToClear);
 
             //La position du client est déterminer par celle du serveur
-            this.players.self.cur_state.pos = this.pos(my_server_pos);
-            this.players.self.last_input_seq = lastinputseq_index;
+            this.players.self.cur_state.pos = this.pos(serverPos);
+            this.players.self.last_input_seq = lastInputSeqIndex;
 
             //On applique à nouveau les évènement qu'on à localement sur le client mais qui n'on pas été traiter sur
             //le serveur.
-            this.client_update_physics();
-            this.client_update_local_position();
+            this.clientUpdatePhysics();
+            this.clientUpdatePos();
         }
     }
 };
 
 //Prototype de la méthode de traitement des mis à jour réseau
-gameShared.prototype.client_process_net_updates = function() {
+gameShared.prototype.clientProcessUpdate = function() {
 
     //Si il n'y à pas d'update serveur on ne fait rien
-    if(!this.server_updates.length)
+    if(!this.serverUpdates.length)
         return;
 
     //On stocke le timer local du client et le nombre d'update sur le serveur
-    var current_time = this.client_time;
-    var count = this.server_updates.length-1;
-    var target_pos = null;
-    var previous_pos = null;
+    var currentTime = this.clientTime;
+    var cpt = this.serverUpdates.length-1;
+    var nextPos = null;
+    var previousPos = null;
 
     //On regarde les plus ancienne mise à jour ver (de terre lol) les plus récentes
     //Au pire on parcours tout
-    for(var i = 0; i < count; ++i) {
+    for(var i = 0; i < cpt; ++i) {
         //On stocke l'update i et l'update i+1
-        var point = this.server_updates[i];
-        var next_point = this.server_updates[i+1];
+        var point = this.serverUpdates[i];
+        var nextPoint = this.serverUpdates[i+1];
 
         //Compare nos positions dans le temps sur le serveur avec le temps local client
-        if(point.t < current_time && current_time < next_point.t) {
+        if(point.t < currentTime && currentTime < nextPoint.t) {
             //Si le temps client est compris entre nos position dans le temps serveur
-            target_pos = next_point;
-            previous_pos = point;
+            nextPos = nextPoint;
+            previousPos = point;
             break;
         }
     }
 
     //Si on ne trouve pas la cible on stocke la dernière position connue sur le serveur
-    if(!target_pos) {
-        target_pos = this.server_updates[0];
-        previous_pos = this.server_updates[0];
+    if(!nextPos) {
+        nextPos = this.serverUpdates[0];
+        previousPos = this.serverUpdates[0];
     }
 
 
     //Maintenant on peut interpoler por savoir ou à peu près on est entre les deux
-    if(target_pos && previous_pos) {
-
-        this.target_time = target_pos.t;
-        var difference = this.target_time - current_time;
-        var max_difference = (target_pos.t - previous_pos.t).fixed(3);
+    if(nextPos && previousPos) {
+        this.seqInput = nextPos.t;
+        var difference = this.seqInput - currentTime;
+        var differenceMax = (nextPos.t - previousPos.t).fixed(3);
 
         //On obtient donc un pourcentage de la distance entre notre point temps client
         //et notre cible comparer à notre cible et à la valeur imédiate précédent sur le serveur
-        var time_point = (difference/max_difference).fixed(3);
+        var timePoint = (difference/differenceMax).fixed(3);
 
         //Du code de bourrin comme on peut pas diviser par zero (sans créer un trou noir),
         //si jamais c'est le cas on met à 0 notre distance
-        if( isNaN(time_point) ) time_point = 0;
-        if(time_point == -Infinity) time_point = 0;
-        if(time_point == Infinity) time_point = 0;
+        if(isNaN(timePoint))
+            timePoint = 0;
+        if(timePoint == -Infinity)
+            timePoint = 0;
+        if(timePoint == Infinity)
+            timePoint = 0;
 
         //La mise à jour al plus récente sur le serveur
-        var latest_server_data = this.server_updates[ this.server_updates.length-1 ];
+        var latestServerData = this.serverUpdates[ this.serverUpdates.length-1 ];
 
         //Position exacte du serveur
-        var other_server_pos = this.players.self.host ? latest_server_data.cp : latest_server_data.hp;
+        var serverOtherPos = this.players.self.host ? latestServerData.cp : latestServerData.hp;
 
         //La position des autres joueurs, avant et après
-        var other_target_pos = this.players.self.host ? target_pos.cp : target_pos.hp;
-        var other_past_pos = this.players.self.host ? previous_pos.cp : previous_pos.hp;
+        var nextOtherPos = this.players.self.host ? nextPos.cp : nextPos.hp;
+        var previousOtherPos = this.players.self.host ? previousPos.cp : previousPos.hp;
 
-        //A VIRER
-        this.ghosts.server_pos_other.pos = this.pos(other_server_pos);
-        this.ghosts.pos_other.pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
+        //Mise à jour de la position des fantôme serveur
+        this.ghosts.server_pos_other.pos = this.pos(serverOtherPos);
+        this.ghosts.pos_other.pos = this.lerpVector(previousOtherPos, nextOtherPos, timePoint);
 
-        //Dépend si on utilise le lissage de déplacement
-        this.players.other.pos = this.v_lerp( this.players.other.pos, this.ghosts.pos_other.pos, this._pdt * this.client_smooth);
+        //Mise à jour de la position
+        this.players.other.pos = this.lerpVector( this.players.other.pos, this.ghosts.pos_other.pos, this._pdt);
 
-
-        //Si jamais on utilise pas la prédiction client ni l'approche naive
-        if(!this.client_predict && !this.naive_approach) {
-
-            //Position exacte du serveur
-            var my_server_pos = this.players.self.host ? latest_server_data.hp : latest_server_data.cp;
-
-            //La position des autres joueurs, avant et après
-            var my_target_pos = this.players.self.host ? target_pos.hp : target_pos.cp;
-            var my_past_pos = this.players.self.host ? previous_pos.hp : previous_pos.cp;
-
-            //A VIRER
-            this.ghosts.server_pos_self.pos = this.pos(my_server_pos);
-            var local_target = this.v_lerp(my_past_pos, my_target_pos, time_point);
-
-            //Dépend si on utilise le lissage de déplacement
-            this.players.self.pos = this.v_lerp( this.players.self.pos, local_target, this._pdt*this.client_smooth);
-        }
     }
 };
 
 //Prototype de la méthode de mise à jour du joueur lors de la reception de mise à jour serveur
-gameShared.prototype.client_onserverupdate_received = function(data){
+gameShared.prototype.clientReceiveUpdate = function(data){
 
-    //Lets clarify the information we have locally. One of the players is 'hosting' and
-    //the other is a joined in client, so we name these host and client for making sure
-    //the positions we get from the server are mapped onto the correct local sprites
-    var player_host = this.players.self.host ?  this.players.self : this.players.other;
-    var player_client = this.players.self.host ?  this.players.other : this.players.self;
+    //On récupère l'hote et le challenger
+    var playerHost = this.players.self.host ?  this.players.self : this.players.other;
+    var playerClient = this.players.self.host ?  this.players.other : this.players.self;
 
-    //Store the server time (this is offset by the latency in the network, by the time we get it)
-    this.server_time = data.t;
-    //Update our local offset time from the last server update
-    this.client_time = this.server_time - (this.net_offset/1000);
+    //On récupère le temps du server (différent réellement du temps serveur à cause de la latence)
+    this.serverTime = data.t;
+
+    //Mise à jour du temps côté client en fonction du temps serveur
+    this.clientTime = this.serverTime;
 
     //One approach is to set the position directly as the server tells you.
     //This is a common mistake and causes somewhat playable results on a local LAN, for example,
@@ -734,92 +672,75 @@ gameShared.prototype.client_onserverupdate_received = function(data){
     //information to interpolate with so it misses positions, and packet loss destroys this approach
     //even more so. See 'the bouncing ball problem' on Wikipedia.
 
-    if(this.naive_approach) {
-
+    //Approche basique où on recopie bêtement ce qu'envoie le serveur
+    if(this.noob) {
         if(data.hp)
-            player_host.pos = this.pos(data.hp);
-
+            playerHost.pos = this.pos(data.hp);
         if(data.cp)
-            player_client.pos = this.pos(data.cp);
-
+            playerClient.pos = this.pos(data.cp);
     } else {
+        //On garde en mémoire locale les données envoyées par le serveur
+        this.serverUpdates.push(data);
 
-        //Cache the data from the server,
-        //and then play the timeline
-        //back to the player with a small delay (net_offset), allowing
-        //interpolation between the points.
-        this.server_updates.push(data);
+        //On limite le nombre d'update en seconde ici 2 soit 120 update (60fps)
+        if(this.serverUpdates.length >= ( 60*this.buffer ))
+            this.serverUpdates.splice(0,1);
 
-        //we limit the buffer in seconds worth of updates
-        //60fps*buffer seconds = number of samples
-        if(this.server_updates.length >= ( 60*this.buffer_size )) {
-            this.server_updates.splice(0,1);
-        }
-
-        //We can see when the last tick we know of happened.
-        //If client_time gets behind this due to latency, a snap occurs
-        //to the last tick. Unavoidable, and a reallly bad connection here.
-        //If that happens it might be best to drop the game after a period of time.
-        this.oldest_tick = this.server_updates[0].t;
-
-        //Handle the latest positions from the server
-        //and make sure to correct our local predictions, making the server have final say.
-        this.client_process_net_prediction_correction();
-
-    } //non naive
-
+        //Gère la dernière position venant du serveur et corrige les predictions si besoin
+        this.clientPredictionCorrection();
+    }
 };
 
 //Prototype de la méthode de mise à jour du joueur avec la prédiction client
-gameShared.prototype.client_update_local_position = function(){
-
-    if(this.client_predict) {
+//PREDICTION CLIENT
+gameShared.prototype.clientUpdatePos = function(){
+    if(this.prediction) {
         //L'État actuel du joueur
-        var current_state = this.players.self.cur_state.pos;
+        var currentState = this.players.self.cur_state.pos;
 
         //On met à jour la position du joueur
-        this.players.self.pos = current_state;
+        this.players.self.pos = currentState;
 
         //On vérifie la collision
-        this.check_collision( this.players.self );
-        this.isCollision(this.players.self, this.players.other)
+        this.checkCollision( this.players.self );
     }
 };
 
 //Prototype de la méthode mise à jour de la position du joueur
-gameShared.prototype.client_update_physics = function() {
+//PREDICTION CLIENT
+gameShared.prototype.clientUpdatePhysics = function() {
 
     //On récupère la nouvelle direction depuis le buffer d'évènements
     //Ensuite on l'applique à l'état actuel
-    if(this.client_predict) {
+    if(this.prediction) {
         this.players.self.old_state.pos = this.pos( this.players.self.cur_state.pos );
-        var nd = this.process_input(this.players.self);
-        this.players.self.cur_state.pos = this.v_add( this.players.self.old_state.pos, nd);
+        var newVector = this.communProcessInputs(this.players.self);
+        this.players.self.cur_state.pos = this.addVector( this.players.self.old_state.pos, newVector);
         this.players.self.state_time = this.local_time;
     }
 };
 
 //Prototype de la méthode de mise à jour client de dessin
-gameShared.prototype.client_update = function() {
+gameShared.prototype.clientUpdate = function() {
 
     //On gère les évènement client
-    this.client_handle_input();
+    this.clientProcessInputs();
 
     //On met à jour les positions des autres joueurs
-    this.client_process_net_updates();
+    this.clientProcessUpdate();
 
     //On redessine les autres joueurs
     this.players.other.draw();
 
     //On met à jour la position du joueur
-    this.client_update_local_position();
+    this.clientUpdatePos();
 
     //On redessine le joueur
     this.players.self.draw();
 };
 
 //Timer pour calcul du temps toutes les 1ms
-gameShared.prototype.create_timer = function(){
+gameShared.prototype.clientStartTimer = function(){
     setInterval(function(){
         this._dt = new Date().getTime() - this._dte;
         this._dte = new Date().getTime();
@@ -827,64 +748,56 @@ gameShared.prototype.create_timer = function(){
     }.bind(this), 1);
 };
 
-//Boucle toutes les 15ms
-gameShared.prototype.create_physics_simulation = function() {
-
+//Boucle toutes les 15ms pour la physique de jeu
+gameShared.prototype.clientStartPhysics = function() {
     setInterval(function(){
         this._pdt = (new Date().getTime() - this._pdte)/1000.0;
         this._pdte = new Date().getTime();
-        this.update_physics();
+        this.communUpdatePhysics();
     }.bind(this), 15);
-
 };
 
 //A REDEFINIR OU VIRER COMPLETEMENT
-gameShared.prototype.client_create_configuration = function() {
+gameShared.prototype.clientConfig = function() {
 
-    this.naive_approach = true;
-    this.client_predict = false;
+    this.noob = true;
+    this.prediction = false;
     this.input_seq = 0;
-    this.client_smooth = 25;
 
-    this.net_latency = 0.001;
+    this.buffer = 2;
+    this.seqInput = 0.01;
 
-    this.net_offset = 100;
-    this.buffer_size = 2;
-    this.target_time = 0.01;
-
-    this.client_time = 0.01;
-    this.server_time = 0.01;
+    this.clientTime = 0.01;
+    this.serverTime = 0.01;
 };
 
 //Prototype de la méthode lorsque qu'on reset les positions
-gameShared.prototype.client_reset_positions = function() {
+gameShared.prototype.clientResetPos = function() {
 
     this.ctx.clearRect(0, 0, 720, 480);
     //Définition de l'hôte et des autre client
-    ////!!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!!!!/////
-    var player_host = this.players.self.host ?  this.players.self : this.players.other;
-    var player_client = this.players.self.host ?  this.players.other : this.players.self;
+    var playerHost = this.players.self.host ?  this.players.self : this.players.other;
+    var playerClient = this.players.self.host ?  this.players.other : this.players.self;
 
     //On vide l'historique des positions des joueurs
-    player_host.history = [];
-    player_client.history = [];
+    playerHost.history = [];
+    playerClient.history = [];
 
     //Position de l'hôte
-    player_host.pos = {
+    playerHost.pos = {
         x:20,
         y:20
     };
 
     //Position des autres joueurs
-    ////!!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!!!!/////
-    player_client.pos = {
+    playerClient.pos = {
         x:700,
         y:20
     };
 
     //On rajoute dans leur historique respectif la position initiale des joueurs
-    player_host.history.push(player_host.generateCoords(player_host.pos.x, player_host.pos.y));
-    player_client.history.push(player_client.generateCoords(player_client.pos.x, player_client.pos.y));
+    playerHost.history.push(playerHost.generateCoords(playerHost.pos.x, playerHost.pos.y));
+    playerClient.history.push(playerClient.generateCoords(playerClient.pos.x, playerClient.pos.y));
 
     //Mise à jour de la position locale du joueur
     this.players.self.old_state.pos = this.pos(this.players.self.pos);
@@ -900,133 +813,131 @@ gameShared.prototype.client_reset_positions = function() {
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous disant qu'une partie est disponible
-gameShared.prototype.client_onreadygame = function(data) {
+gameShared.prototype.clientLaunchGame = function(data) {
 
     //Le temps auquel le serveur à fait sa demande
-    var server_time = parseFloat(data.replace('-','.'));
+    var serverTime = parseFloat(data.replace('-','.'));
 
     //Définition de l'hôte et des autre client
-    ////!!!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!!!!/////
-    var player_host = this.players.self.host ?  this.players.self : this.players.other;
-    var player_client = this.players.self.host ?  this.players.other : this.players.self;
+    var playerHost = this.players.self.host ?  this.players.self : this.players.other;
+    var playerClient = this.players.self.host ?  this.players.other : this.players.self;
 
     //Estimation du temps actuel sur le serveur
-    this.local_time = server_time + this.net_latency;
+    this.local_time = serverTime;
 
     //Affichage du temps du serveur sur la console CLIENT !!!!
     console.log('server time is about ' + this.local_time);
 
     //Couleur des joueurs
-    player_host.info_color = '#2288cc';
-    player_client.info_color = '#cc8822';
+    playerHost.infoColor = '#2288cc';
+    playerClient.infoColor = '#cc8822';
 
-    //Update their information
-    player_host.state = 'King';
-    player_client.state = 'Challenger';
+    //Mise à jour de l'état des joueurs
+    playerHost.state = 'King';
+    playerClient.state = 'Challenger';
 
     //Synchronisation couleurs
     this.socket.send('c.' + this.players.self.color);
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous demandant de rejoindre une partie
-gameShared.prototype.client_onjoingame = function() {
+gameShared.prototype.clientOnJoin = function() {
 
     //Nous ne sommes pas hôte
     this.players.self.host = false;
 
     //État du joueur
     this.players.self.state = 'Challenger - ready to fight';
-    this.players.self.info_color = '#00bb00';
+    this.players.self.infoColor = '#00bb00';
 
     //On reset les postion pour être sur d'être bien placer
-    this.client_reset_positions();
+    this.clientResetPos();
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous demandant d'être hôte de partie
-gameShared.prototype.client_onhostgame = function(data) {
+gameShared.prototype.clientOnHost = function(data) {
 
     //Le temps auquel le serveur à fait sa demande
-    var server_time = parseFloat(data.replace('-','.'));
+    var serverTime = parseFloat(data.replace('-','.'));
 
     //Estimation du temps actuel sur le serveur
-    this.local_time = server_time + this.net_latency;
+    this.local_time = serverTime;
 
     //Nous somme l'hôté
     this.players.self.host = true;
 
     //État du joueur
     this.players.self.state = 'The king - Awaiting challenger';
-    this.players.self.info_color = '#cc0000';
+    this.players.self.infoColor = '#cc0000';
 
     //On reset les postion pour être sur d'être bien plaer
-    this.client_reset_positions();
+    this.clientResetPos();
 
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur de connection
-gameShared.prototype.client_onconnected = function(data) {
+gameShared.prototype.clientOnConnected = function(data) {
     //On stocke des informations qui nous sont relatives
     //et on indique qu'on est prêt à jouer
     this.players.self.id = data.id;
-    this.players.self.info_color = '#cc0000';
+    this.players.self.infoColor = '#cc0000';
     this.players.self.state = 'connected';
     this.players.self.online = true;
 };
 
 //A VIRER
-gameShared.prototype.client_on_otherclientcolorchange = function(data) {
+gameShared.prototype.clientOtherColorChange = function(data) {
     this.players.other.color = data;
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur
-gameShared.prototype.client_onnetmessage = function(data) {
+gameShared.prototype.clientOnMessage = function(data) {
 
     //On parse le message
     var commands = data.split('.');
     var command = commands[0];
-    var subcommand = commands[1] || null;
-    var commanddata = commands[2] || null;
+    var subCommand = commands[1] || null;
+    var commandData = commands[2] || null;
 
     //On vérifie que le message est bien un message serveur
     switch(command) {
         case 's':
             //En fonction du deuxième flag on appelle la méthode adéquate
-            switch(subcommand) {
+            switch(subCommand) {
                 case 'h' :
-                    this.client_onhostgame(commanddata); break;
+                    this.clientOnHost(commandData); break;
 
                 case 'j' :
-                    this.client_onjoingame(commanddata); break;
+                    this.clientOnJoin(commandData); break;
 
                 case 'r' :
-                    this.client_onreadygame(commanddata); break;
+                    this.clientLaunchGame(commandData); break;
 
                 case 'e' :
-                    this.client_ondisconnect(commanddata); break;
+                    this.clientDeconnection(commandData); break;
 
                 case 'c' :
-                    this.client_on_otherclientcolorchange(commanddata); break;
+                    this.clientOtherColorChange(commandData); break;
             }
             break;
     }
 };
 
 //Prototype de la méthode lorsqu'il y a deconnection
-gameShared.prototype.client_ondisconnect = function(data) {
+gameShared.prototype.clientDeconnection = function() {
 
     //On change l'état du joueur
-    this.players.self.info_color = 'rgba(255,255,255,0.1)';
-    this.players.self.state = 'not-connected';
+    this.players.self.infoColor = 'rgba(255,255,255,0.1)';
+    this.players.self.state = 'Deconnecté';
     this.players.self.online = false;
 
     //On change les états des autres joueurs
-    /////!!!!! A MODIFIER POUR GERER PLUSIEURS JOUEURS !!!!!//////
-    this.players.other.info_color = 'rgba(255,255,255,0.1)';
-    this.players.other.state = 'not-connected';
+    this.players.other.infoColor = 'rgba(255,255,255,0.1)';
+    this.players.other.state = 'Deconnecté';
 };
 
 //Prototype de la méthode de connection du client au serveur
-gameShared.prototype.client_connect_to_server = function() {
+gameShared.prototype.clientConnection = function() {
 
     //La socket de connection
     this.socket = io.connect();
@@ -1038,18 +949,18 @@ gameShared.prototype.client_connect_to_server = function() {
     }.bind(this));
 
     //Reception du message serveur lorsqu'on se deconnecte
-    this.socket.on('disconnect', this.client_ondisconnect.bind(this));
+    this.socket.on('disconnect', this.clientDeconnection.bind(this));
 
     //Reception du message des mises à jour du serveur
-    this.socket.on('onserverupdate', this.client_onserverupdate_received.bind(this));
+    this.socket.on('onserverupdate', this.clientReceiveUpdate.bind(this));
 
     //Reception du message serveur lorsqu'on se connecte
-    this.socket.on('onconnected', this.client_onconnected.bind(this));
+    this.socket.on('onconnected', this.clientOnConnected.bind(this));
 
     //Reception du message serveur lorsqu'il y a une erreur
-    this.socket.on('error', this.client_ondisconnect.bind(this));
+    this.socket.on('error', this.clientDeconnection.bind(this));
 
     //Reception d'un message serveur
-    this.socket.on('message', this.client_onnetmessage.bind(this));
+    this.socket.on('message', this.clientOnMessage.bind(this));
 };
 

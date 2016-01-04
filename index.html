@@ -1,4 +1,3 @@
-<!--
 <!DOCTYPE html>
 <html>
 	<head>
@@ -13,59 +12,4 @@
         <h1> TRON </h1>
 		<canvas id="gamefield"></canvas>
 	</body>
-</html>-->
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>TRON THE GAME</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <link href="index.css" rel="stylesheet" />
-    <script type="text/javascript" src="lib/keyboard.js"></script>
-    <script type="text/javascript" src="shared.js"></script>
-
-    <!--<script type="text/javascript">
-         var socket = io.connect();
-         socket.on('onconnected', function( data ) {
-             console.log('connected '+data.id);
-         });
-         socket.on('disconnecd', function( data ) {
-             console.log('disconnect '+data.id);
-         });
-     </script>-->
-    <!--<script type="text/javascript">
-        var socket = io.connect();
-        socket.on('onconnected', function( data ) {
-            console.log(data.id);
-        });
-    </script>-->
-</head>
-
-<body id="logged-out">
-
-<section id="chat">
-    <ul id="messages"></ul>
-    <ul id="users">
-    </ul>
-</section>
-
-<section id="login">
-    <form action="">
-        <label for="u">Username</label>
-        <input id="u" autocomplete="off" autofocus />
-        <p>
-            <button>Login</button>
-        </p>
-    </form>
-</section>
-
-
-<section id="jeu">
-    <canvas id="viewport" ></canvas>
-    <label id="message"></label>
-</section>
-<script src="http://code.jquery.com/jquery-1.11.1.js"></script>
-<script src="https://cdn.socket.io/socket.io-1.3.7.js"></script>
-<script type="text/javascript" src="client.js"></script>
-</body>
 </html>

@@ -55,7 +55,7 @@ gameServer.onInput = function(player, inputs) {
     var input_seq = inputs[3];
 
     if(player && player.game && player.game.gamecore)
-        player.game.gamecore.handle_server_input(player, input_commands, input_time, input_seq);
+        player.game.gamecore.serverProcessInputs(player, input_commands, input_time, input_seq);
 };
 
 //////////////////////////////////////////
@@ -88,7 +88,7 @@ gameServer.createGame = function(player) {
     instanceDePartie.gamecore = new gameShared(instanceDePartie);
 
     //On met à jour la boucle de jeu sur le serveur
-    instanceDePartie.gamecore.update( new Date().getTime() );
+    instanceDePartie.gamecore.update();
 
     //On envoi un message au joueur pour lui dire que c'est l'hôte de la partie
     //Flag s = message venant du serveur
@@ -118,7 +118,7 @@ gameServer.endGame = function(idPartie, idClient) {
     if(instanceDePartie) {
 
         //On arrête la mise à jour de la partie
-        instanceDePartie.gamecore.stop_update();
+        instanceDePartie.gamecore.stopUpdate();
 
         //Si il reste plus de 1 seul joueur
         if(instanceDePartie.player_count > 1) {
