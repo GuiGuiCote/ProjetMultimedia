@@ -26,7 +26,11 @@ $('#login form').submit(function (e) {
     if (user.username.length > 0) { // Si le champ de connexion n'est pas vide
         socket.emit('user-login', user, function (success) {
             if (success) {
+
+
+                document.getElementById("log").disabled = true;
                 $('body').removeAttr('id'); // Cache formulaire de connexion
+
                 $('#chat input').focus(); // Focus sur le champ du message
             }
         });

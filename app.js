@@ -13,6 +13,7 @@ app.use('/', express.static(__dirname + '/index.html'));
  * Liste des utilisateurs connectés
  */
 var users = [];
+var users1 = [];
 
 /**
  * Historique des messages
@@ -118,8 +119,8 @@ io.sockets.on('connection', function (client) {
         // Vérification que l'utilisateur n'existe pas
         var userIndex = -1;
         var count=0;
-        for (var i = 0; i < users.length; i++) {
-            if (users[i].username === user.username) {
+        for (var i = 0; i < users1.length; i++) {
+            if (users1[i] === user.username) {
                 userIndex = i;
                 count=count+1;
             }
@@ -127,8 +128,9 @@ io.sockets.on('connection', function (client) {
         if (user !== undefined && userIndex === -1) { // S'il est bien nouveau
             // Sauvegarde de l'utilisateur et ajout à la liste des connectés
 
-            if(users.length<2) {
+            if(users.length<100) {
                 loggedUser = user;
+                users1.push(user.username);
                 users.push(loggedUser);
 
                 io.emit('user-login', loggedUser);
@@ -147,12 +149,12 @@ io.sockets.on('connection', function (client) {
                 client.on('message', function(m) {
                     gameServer.onMessage(client, m);
                 });
+
                 callback(true);
-            }else{
-                users=[];
             }
         } else if (user !== undefined && userIndex !== -1) {
-            if(users.length<2) {
+            if(users.length<100) {
+                users1.push(user.username);
                 user.username=user.username+count;
                 loggedUser = user;
                 users.push(loggedUser);
@@ -173,9 +175,8 @@ io.sockets.on('connection', function (client) {
                 client.on('message', function(m) {
                     gameServer.onMessage(client, m);
                 });
+
                 callback(true);
-            }else{
-                users=[];
             }
 
         }else{

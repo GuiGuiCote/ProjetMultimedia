@@ -9,19 +9,21 @@
         <script type="text/javascript" src="shared.js"></script>
     </head>
     <body id="logged-out">
+
         <section id="chat">
             <ul id="messages"></ul>
             <ul id="users"></ul>
         </section>
         <section id="login">
-            <form action="">
+            <form action="" id="mrof">
                 <label for="u">Username</label>
                 <input id="u" autocomplete="off" autofocus />
                 <p>
-                    <button>Login</button>
+                    <button id="log">Login</button>
                 </p>
             </form>
         </section>
+
         <section id="jeu">
             <canvas id="gamefield" ></canvas>
             <label id="message"></label>

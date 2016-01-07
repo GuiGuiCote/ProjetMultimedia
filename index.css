@@ -78,10 +78,15 @@ section#chat #users li span.typing {
 section#login {
     transition: all 0.5s;
     opacity: 0;
-    top: 35%;
+    background: rgb(255,255,255);
     text-align: center;
     position: fixed;
+    height: 100%;
     width: 100%
+}
+
+#mrof{
+    padding-top: 15%;
 }
 section#login label[for="u"] {
     display: block;
