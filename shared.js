@@ -3,7 +3,7 @@
 // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
 
 var frame_time = 60/1000; //60Hz soit ~16ms par frame
-if('undefined' != typeof(global)) frame_time = 45; //22Hz soit ~45ms par frame
+if(typeof(global) != 'undefined') frame_time = 45; //22Hz soit ~45ms par frame
 
 ( function () {
     var lastTime = 0;
@@ -71,12 +71,12 @@ var gameShared = function(game_instance){
         //Position sur le serveur
         this.ghosts = {
             server_pos_self : new gamePlayer(this),
-            server_pos_other : new gamePlayer(this),
-            pos_other : new gamePlayer(this)
+            serverOtherPos : new gamePlayer(this),
+            otherPos : new gamePlayer(this)
         };
         this.ghosts.server_pos_self.pos = { x:20, y:20 };
-        this.ghosts.server_pos_other.pos = { x:700, y:20 };
-        this.ghosts.pos_other.pos = { x:700, y:20 };
+        this.ghosts.serverOtherPos.pos = { x:700, y:20 };
+        this.ghosts.otherPos.pos = { x:700, y:20 };
     }
 
     //La vitesse de déplacement du joueur
@@ -87,7 +87,7 @@ var gameShared = function(game_instance){
     this._pdte = new Date().getTime();  //Le delta e la dernière update de la physique
 
     //Valeur pour la précision client et serveur
-    this.local_time = 0.016;            //Timer local
+    this.localTime = 0.016;            //Timer local
     this._dt = new Date().getTime();    //Delta du timer local
     this._dte = new Date().getTime();   //Le timer loal de la dernière frame
 
@@ -182,6 +182,9 @@ var gamePlayer = function( game_instance, player_instance ) {
     this.instance = player_instance;
     this.game = game_instance;
 
+    //La direction courante du joueur
+    this.currentDirection = null;
+
     //Initialisation des attributs de départ
     this.pos = {
         x:0,
@@ -194,7 +197,6 @@ var gamePlayer = function( game_instance, player_instance ) {
         hy: 4
     };
     this.state = 'Déconnecté';
-    this.color = 'rgba(255,255,255,0.1)';
     this.infoColor = 'rgba(255,255,255,0.1)';
     this.id = '';
 
@@ -411,7 +413,7 @@ gameShared.prototype.serverUpdatePhysics = function() {
     //Vérification des collisions pour les autres joueurs
     this.checkCollision( this.players.other );
 
-    //On dump le contenu du buffer d'évènement
+    //On libère le contenu de l'array
     this.players.self.inputs = [];
     this.players.other.inputs = [];
 };
@@ -420,7 +422,7 @@ gameShared.prototype.serverUpdatePhysics = function() {
 gameShared.prototype.serverUpdate = function(){
 
     //Mise à joure du timer local pour correspondre au timer
-    this.serverTime = this.local_time;
+    this.serverTime = this.localTime;
 
     //On construit un état pour l'envoyer aux joueurs
     this.laststate = {
@@ -442,7 +444,7 @@ gameShared.prototype.serverUpdate = function(){
 };
 
 //Prototype de la méthode pour gérer les évènements des joueurs sur le serveur
-gameShared.prototype.serverProcessInputs = function(player, input, input_time, input_seq) {
+gameShared.prototype.serverProcessInputs = function(player, input, input_time, seqInput) {
 
     //On vérifie de quel joueur les évènements viennent
     var playerClient =
@@ -452,9 +454,8 @@ gameShared.prototype.serverProcessInputs = function(player, input, input_time, i
     playerClient.inputs.push({
         inputs: input,
         time: input_time,
-        seq: input_seq
+        seq: seqInput
     });
-
 };
 
 
@@ -498,20 +499,20 @@ gameShared.prototype.clientProcessInputs = function(){
     //Si on à des évènements
     if(input.length) {
         //On incrémente le flag de séquence
-        this.input_seq += 1;
+        this.seqInput += 1;
 
         //On stocke dans notre liste d'évènement les évènement avec le temps local et le flag de séquence
         this.players.self.inputs.push({
             inputs : input,
-            time : this.local_time.fixed(3),
-            seq : this.input_seq
+            time : this.localTime.fixed(3),
+            seq : this.seqInput
         });
 
         //On construit le packet
         var packet = 'i.';
         packet += input.join('-') + '.';
-        packet += this.local_time.toFixed(3).replace('.','-') + '.';
-        packet += this.input_seq;
+        packet += this.localTime.toFixed(3).replace('.','-') + '.';
+        packet += this.seqInput;
 
         //On envoi le packet au serveur
         this.socket.send(packet);
@@ -543,7 +544,6 @@ gameShared.prototype.clientPredictionCorrection = function() {
     //Si c'est l'hote on récupère sa position sinon on récupère la position des autres joueurs
     var serverPos = this.players.self.host ? latestServerData.hp : latestServerData.cp;
 
-    //A VIRER
     this.ghosts.server_pos_self.pos = this.pos(serverPos);
 
     //Si c'est l'hote on récupère ses évènements sinon on récupère les évènements des autres joueurs
@@ -616,8 +616,8 @@ gameShared.prototype.clientProcessUpdate = function() {
 
     //Maintenant on peut interpoler por savoir ou à peu près on est entre les deux
     if(nextPos && previousPos) {
-        this.seqInput = nextPos.t;
-        var difference = this.seqInput - currentTime;
+        this.seqTime = nextPos.t;
+        var difference = this.seqTime - currentTime;
         var differenceMax = (nextPos.t - previousPos.t).fixed(3);
 
         //On obtient donc un pourcentage de la distance entre notre point temps client
@@ -644,11 +644,11 @@ gameShared.prototype.clientProcessUpdate = function() {
         var previousOtherPos = this.players.self.host ? previousPos.cp : previousPos.hp;
 
         //Mise à jour de la position des fantôme serveur
-        this.ghosts.server_pos_other.pos = this.pos(serverOtherPos);
-        this.ghosts.pos_other.pos = this.lerpVector(previousOtherPos, nextOtherPos, timePoint);
+        this.ghosts.serverOtherPos.pos = this.pos(serverOtherPos);
+        this.ghosts.otherPos.pos = this.lerpVector(previousOtherPos, nextOtherPos, timePoint);
 
         //Mise à jour de la position
-        this.players.other.pos = this.lerpVector( this.players.other.pos, this.ghosts.pos_other.pos, this._pdt);
+        this.players.other.pos = this.lerpVector( this.players.other.pos, this.ghosts.otherPos.pos, this._pdt);
 
     }
 };
@@ -666,18 +666,13 @@ gameShared.prototype.clientReceiveUpdate = function(data){
     //Mise à jour du temps côté client en fonction du temps serveur
     this.clientTime = this.serverTime;
 
-    //One approach is to set the position directly as the server tells you.
-    //This is a common mistake and causes somewhat playable results on a local LAN, for example,
-    //but causes terrible lag when any ping/latency is introduced. The player can not deduce any
-    //information to interpolate with so it misses positions, and packet loss destroys this approach
-    //even more so. See 'the bouncing ball problem' on Wikipedia.
-
     //Approche basique où on recopie bêtement ce qu'envoie le serveur
     if(this.noob) {
         if(data.hp)
             playerHost.pos = this.pos(data.hp);
         if(data.cp)
             playerClient.pos = this.pos(data.cp);
+
     } else {
         //On garde en mémoire locale les données envoyées par le serveur
         this.serverUpdates.push(data);
@@ -716,7 +711,7 @@ gameShared.prototype.clientUpdatePhysics = function() {
         this.players.self.old_state.pos = this.pos( this.players.self.cur_state.pos );
         var newVector = this.communProcessInputs(this.players.self);
         this.players.self.cur_state.pos = this.addVector( this.players.self.old_state.pos, newVector);
-        this.players.self.state_time = this.local_time;
+        this.players.self.state_time = this.localTime;
     }
 };
 
@@ -744,7 +739,7 @@ gameShared.prototype.clientStartTimer = function(){
     setInterval(function(){
         this._dt = new Date().getTime() - this._dte;
         this._dte = new Date().getTime();
-        this.local_time += this._dt/1000.0;
+        this.localTime += this._dt/1000.0;
     }.bind(this), 1);
 };
 
@@ -757,15 +752,15 @@ gameShared.prototype.clientStartPhysics = function() {
     }.bind(this), 15);
 };
 
-//A REDEFINIR OU VIRER COMPLETEMENT
+//Configuration client
 gameShared.prototype.clientConfig = function() {
 
     this.noob = true;
-    this.prediction = false;
-    this.input_seq = 0;
+    this.prediction = true;
+    this.seqInput = 0;
 
     this.buffer = 2;
-    this.seqInput = 0.01;
+    this.seqTime = 0.01;
 
     this.clientTime = 0.01;
     this.serverTime = 0.01;
@@ -804,12 +799,9 @@ gameShared.prototype.clientResetPos = function() {
     this.players.self.pos = this.pos(this.players.self.pos);
     this.players.self.cur_state.pos = this.pos(this.players.self.pos);
 
-    //A VIRER
     this.ghosts.server_pos_self.pos = this.pos(this.players.self.pos);
-
-    //CA AUSSI !!!
-    this.ghosts.server_pos_other.pos = this.pos(this.players.other.pos);
-    this.ghosts.pos_other.pos = this.pos(this.players.other.pos);
+    this.ghosts.serverOtherPos.pos = this.pos(this.players.other.pos);
+    this.ghosts.otherPos.pos = this.pos(this.players.other.pos);
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous disant qu'une partie est disponible
@@ -823,10 +815,10 @@ gameShared.prototype.clientLaunchGame = function(data) {
     var playerClient = this.players.self.host ?  this.players.other : this.players.self;
 
     //Estimation du temps actuel sur le serveur
-    this.local_time = serverTime;
+    this.localTime = serverTime;
 
     //Affichage du temps du serveur sur la console CLIENT !!!!
-    console.log('server time is about ' + this.local_time);
+    console.log('server time is about ' + this.localTime);
 
     //Couleur des joueurs
     playerHost.infoColor = '#2288cc';
@@ -837,7 +829,7 @@ gameShared.prototype.clientLaunchGame = function(data) {
     playerClient.state = 'Challenger';
 
     //Synchronisation couleurs
-    this.socket.send('c.' + this.players.self.color);
+    this.socket.send('c.' + this.players.self.infoColor);
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur nous demandant de rejoindre une partie
@@ -861,7 +853,7 @@ gameShared.prototype.clientOnHost = function(data) {
     var serverTime = parseFloat(data.replace('-','.'));
 
     //Estimation du temps actuel sur le serveur
-    this.local_time = serverTime;
+    this.localTime = serverTime;
 
     //Nous somme l'hôté
     this.players.self.host = true;
@@ -885,9 +877,9 @@ gameShared.prototype.clientOnConnected = function(data) {
     this.players.self.online = true;
 };
 
-//A VIRER
+//Prototype de la méthode de changement de couleur des autres joueurs
 gameShared.prototype.clientOtherColorChange = function(data) {
-    this.players.other.color = data;
+    this.players.other.infoColor = data;
 };
 
 //Prototype de la méthode lors de la reception d'un message serveur

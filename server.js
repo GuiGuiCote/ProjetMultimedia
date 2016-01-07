@@ -35,7 +35,7 @@ gameServer.onMessage = function(client, message) {
     var message_parts = message.split('.');
     var message_type = message_parts[0];
 
-    var other_client = (client.game.player_host.userid == client.userid) ? client.game.player_client : client.game.player_host;
+    var other_client = (client.game.playerHost.userid == client.userid) ? client.game.playerClient : client.game.playerHost;
 
     if(message_type == 'i')
         this.onInput(client, message_parts);
@@ -72,8 +72,8 @@ gameServer.createGame = function(player) {
     //Nouvelle instance de partie
     var instanceDePartie = {
             idDeLaPartie: UUID(),
-            player_host: player,
-            player_client: null,
+            playerHost: player,
+            playerClient: null,
             player_count: 1
         };
 
@@ -124,27 +124,27 @@ gameServer.endGame = function(idPartie, idClient) {
         if(instanceDePartie.player_count > 1) {
 
             //Si l'hôte quitte
-            if(idClient == instanceDePartie.player_host.userid) {
+            if(idClient == instanceDePartie.playerHost.userid) {
 
                //Alors on trouve une autre partie pour les joueurs restants
-                if(instanceDePartie.player_client) {
-                    instanceDePartie.player_client.send('s.e');
-                    this.findGame(instanceDePartie.player_client);
+                if(instanceDePartie.playerClient) {
+                    instanceDePartie.playerClient.send('s.e');
+                    this.findGame(instanceDePartie.playerClient);
                 }
             //Si un autre joueur quitte
             } else {
-                if(instanceDePartie.player_host) {
+                if(instanceDePartie.playerHost) {
 
                     //Envoi du message de fin de partie à l'hôte
                     //Flag s = message venant du serveur
                     //Flag e = partie terminée
-                    instanceDePartie.player_host.send('s.e');
+                    instanceDePartie.playerHost.send('s.e');
 
                     //Comme la partie est terminée, il n'est plus hôte d'une partie
-                    instanceDePartie.player_host.hosting = false;
+                    instanceDePartie.playerHost.hosting = false;
 
                     //On essaie de lui touver une autre partie
-                    this.findGame(instanceDePartie.player_host);
+                    this.findGame(instanceDePartie.playerHost);
                 }
             }
         }
@@ -171,14 +171,14 @@ gameServer.startGame = function(game) {
     //On dit au client qui rejoins la aprtie qu'il rejoins une partie
     //Flag s = message du serveur
     //Flag j = vous rejoignez une partie
-    game.player_client.send('s.j.' + game.player_host.userid);
+    game.playerClient.send('s.j.' + game.playerHost.userid);
 
     //On met à jour la partie du joueur qui rejoint
-    game.player_client.game = game;
+    game.playerClient.game = game;
 
     //On dit aux deux joueur que la partie démarre
-    game.player_client.send('s.r.'+ String(game.gamecore.local_time).replace('.','-'));
-    game.player_host.send('s.r.'+ String(game.gamecore.local_time).replace('.','-'));
+    game.playerClient.send('s.r.'+ String(game.gamecore.local_time).replace('.','-'));
+    game.playerHost.send('s.r.'+ String(game.gamecore.local_time).replace('.','-'));
 
     //Un booléen pour savoir si la partie est active
     game.active = true;
@@ -211,7 +211,7 @@ gameServer.findGame = function(player) {
 
                 //On stocke le joueur dans cette partie
                 //On incrémente le nombre de joueur
-                game_instance.player_client = player;
+                game_instance.playerClient = player;
                 game_instance.gamecore.players.other.instance = player;
                 game_instance.player_count++;
 
